@@ -12,15 +12,15 @@ VELODYNE_DIR = os.path.join(DATA_DIR, "velodyne")
 POSES_FILE = os.path.join(DATA_DIR, "poses.txt")
 
 # --- Playback ----------------------------------------------------
-FRAME_SKIP = 2            # Process every Nth frame
-PLAYBACK_DELAY = 0.05     # Seconds between frames
+FRAME_SKIP = 3            # Process every Nth frame
+PLAYBACK_DELAY = 0.03     # Seconds between frames
 MAX_FRAMES = 0            # 0 = all frames
 
 # --- Point Cloud Processing -------------------------------------
-VOXEL_SIZE = 0.4           # Downsample current frame (meters)
-MAP_VOXEL_SIZE = 0.8       # Downsample global map (meters)
-MAX_MAP_POINTS = 2_000_000 # Cap map size to prevent slowdown
-POINT_SIZE = 1.5           # Rendering point size
+VOXEL_SIZE = 0.3           # Downsample current frame (meters)
+MAP_VOXEL_SIZE = 1.0       # Downsample global map (meters)
+MAX_MAP_POINTS = 500_000   # Cap map size to prevent slowdown
+POINT_SIZE = 2.0           # Rendering point size
 
 # --- Deviation Detection ----------------------------------------
 DEVIATION_THRESHOLD = 0.5  # Distance threshold (meters)

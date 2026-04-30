@@ -53,11 +53,6 @@ def _print_narration(key: str):
 def run(frame_skip: int = None, max_frames: int = None, playback_delay: float = None):
     """
     Run the full demo pipeline.
-    
-    Args:
-        frame_skip: Process every Nth frame (overrides config)
-        max_frames: Stop after N frames (0 = all)
-        playback_delay: Delay between frames in seconds
     """
     if frame_skip is None:
         frame_skip = config.FRAME_SKIP
@@ -105,15 +100,15 @@ def run(frame_skip: int = None, max_frames: int = None, playback_delay: float = 
     tracker = TrajectoryTracker()
     mapper = MapBuilder()
 
-    # -- Narration phases --
+    # -- Narration phases (based on step count, not frame index) --
     phase_thresholds = {
         "raw": 0,
-        "motion": 5,
-        "trajectory": 20,
-        "map": 50,
-        "overlay": 100,
-        "deviation": 150,
-        "prediction": 200,
+        "motion": 3,
+        "trajectory": 15,
+        "map": 40,
+        "overlay": 80,
+        "deviation": 120,
+        "prediction": 160,
     }
 
     _print_narration("raw")
@@ -155,21 +150,24 @@ def run(frame_skip: int = None, max_frames: int = None, playback_delay: float = 
             world_points = mapper.transform_points(points_down, pose)
 
             # -- Phase 5: Add to map (every few frames for performance) --
-            if step % 3 == 0:
+            if step % 4 == 0:
                 mapper.add_frame(points_down, pose)
 
             # -- Phase 8: Compute deviation colors --
-            if step > phase_thresholds.get("deviation", 100):
+            if step > phase_thresholds.get("deviation", 120):
                 colors = compute_deviation_fast(
-                    world_points, mapper.get_map_points(), sample_size=3000
+                    world_points, mapper.get_map_points(), sample_size=1500
                 )
+            elif step > phase_thresholds.get("overlay", 80):
+                # Overlay phase: brighter cyan
+                colors = np.tile([0.0, 1.0, 1.0], (len(world_points), 1))
             else:
-                # Before deviation phase, use live color
+                # Before overlay: default live color
                 colors = np.tile(config.COLOR_LIVE, (len(world_points), 1))
 
             # -- Phase 9: Prediction --
             positions = tracker.get_positions_array()
-            if step > phase_thresholds.get("prediction", 150) and len(positions) > 10:
+            if step > phase_thresholds.get("prediction", 160) and len(positions) > 10:
                 predicted = predict_trajectory(positions)
                 vis.update_prediction(predicted)
 
@@ -180,11 +178,12 @@ def run(frame_skip: int = None, max_frames: int = None, playback_delay: float = 
             if step % 5 == 0 and mapper.point_count > 0:
                 vis.update_map_cloud(mapper.get_map_points())
 
-            # Camera setup on first frame
-            if step == 0:
-                vis.setup_camera(tracker.get_current_position())
-            elif step % 20 == 0:
-                vis.follow_camera(tracker.get_current_position())
+            # Camera: initialize on frame 3 (after window is properly sized),
+            # then follow every 30 frames
+            if step == 3:
+                vis.setup_initial_view(tracker.get_current_position())
+            elif step > 3 and step % 30 == 0:
+                vis.follow_position(tracker.get_current_position())
 
             # -- Render --
             vis.tick()
@@ -195,9 +194,9 @@ def run(frame_skip: int = None, max_frames: int = None, playback_delay: float = 
             fps = (step + 1) / max(elapsed, 0.001)
             if step % 50 == 0:
                 stats_str = ""
-                if step > phase_thresholds.get("deviation", 100):
+                if step > phase_thresholds.get("deviation", 120):
                     stats = get_deviation_stats(
-                        world_points, mapper.get_map_points(), sample_size=500
+                        world_points, mapper.get_map_points(), sample_size=300
                     )
                     stats_str = (
                         f" | Dev: {stats['mean']:.2f}m"

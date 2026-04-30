@@ -1,5 +1,5 @@
 """
-Visualization Engine — Phase 2-3
+Visualization Engine - Phase 2-3
 Open3D-based 3D rendering with real-time streaming updates.
 """
 
@@ -29,19 +29,19 @@ class SceneVisualizer:
         opt.point_size = config.POINT_SIZE
         opt.show_coordinate_frame = False
 
-        # ── Live point cloud (current frame) ──
+        # -- Live point cloud (current frame) --
         self.pcd_live = o3d.geometry.PointCloud()
         self.pcd_live.points = o3d.utility.Vector3dVector(np.zeros((1, 3)))
         self.pcd_live.colors = o3d.utility.Vector3dVector(np.array([config.COLOR_LIVE]))
         self.vis.add_geometry(self.pcd_live)
 
-        # ── Global map point cloud ──
+        # -- Global map point cloud --
         self.pcd_map = o3d.geometry.PointCloud()
         self.pcd_map.points = o3d.utility.Vector3dVector(np.zeros((1, 3)))
         self.pcd_map.colors = o3d.utility.Vector3dVector(np.array([config.COLOR_MAP]))
         self.vis.add_geometry(self.pcd_map)
 
-        # ── Trajectory line ──
+        # -- Trajectory line --
         self.trajectory_line = o3d.geometry.LineSet()
         self.trajectory_line.points = o3d.utility.Vector3dVector(np.zeros((2, 3)))
         self.trajectory_line.lines = o3d.utility.Vector2iVector(np.array([[0, 1]]))
@@ -50,7 +50,7 @@ class SceneVisualizer:
         )
         self.vis.add_geometry(self.trajectory_line)
 
-        # ── Prediction line ──
+        # -- Prediction line --
         self.prediction_line = o3d.geometry.LineSet()
         self.prediction_line.points = o3d.utility.Vector3dVector(np.zeros((2, 3)))
         self.prediction_line.lines = o3d.utility.Vector2iVector(np.array([[0, 1]]))
@@ -59,15 +59,16 @@ class SceneVisualizer:
         )
         self.vis.add_geometry(self.prediction_line)
 
-        # ── Current position marker ──
-        self.position_marker = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
+        # -- Current position marker --
+        self.position_marker = o3d.geometry.TriangleMesh.create_sphere(radius=0.8)
         self.position_marker.paint_uniform_color(config.COLOR_TRAJECTORY)
         self.position_marker.compute_vertex_normals()
         self.vis.add_geometry(self.position_marker)
 
-        # Track if camera has been set
-        self._camera_set = False
+        # Track state
+        self._camera_initialized = False
         self._frame_count = 0
+        self._last_pos = np.zeros(3)
 
     def update_live_cloud(self, points: np.ndarray, colors: np.ndarray = None):
         """Update the live/current frame point cloud."""
@@ -115,7 +116,8 @@ class SceneVisualizer:
 
         # Update position marker
         current_pos = positions[-1]
-        self.position_marker.translate(current_pos, relative=False)
+        self.position_marker.translate(current_pos - self._last_pos, relative=True)
+        self._last_pos = current_pos.copy()
         self.vis.update_geometry(self.position_marker)
 
     def update_prediction(self, positions: np.ndarray):
@@ -136,21 +138,30 @@ class SceneVisualizer:
         )
         self.vis.update_geometry(self.prediction_line)
 
-    def setup_camera(self, look_at: np.ndarray = None):
-        """Set up camera to a good viewing angle."""
-        ctr = self.vis.get_view_control()
-        if look_at is not None:
-            ctr.set_lookat(look_at)
-        ctr.set_zoom(0.15)
-        ctr.set_front([0.0, -0.3, -1.0])
-        ctr.set_up([0.0, -1.0, 0.2])
-        self._camera_set = True
-
-    def follow_camera(self, position: np.ndarray):
-        """Make camera follow the current position (subtle)."""
-        if self._frame_count % 10 == 0:  # Don't update every frame (too jittery)
+    def setup_initial_view(self, position: np.ndarray):
+        """Set up the initial camera view. Only call after first render."""
+        if self._camera_initialized:
+            return
+        try:
             ctr = self.vis.get_view_control()
             ctr.set_lookat(position)
+            ctr.set_zoom(0.08)
+            ctr.set_front([-0.3, -0.2, -0.9])
+            ctr.set_up([0.0, -1.0, 0.1])
+            self._camera_initialized = True
+        except Exception:
+            pass  # Window not ready yet, will try next frame
+
+    def follow_position(self, position: np.ndarray):
+        """Gently update camera look-at to follow the position."""
+        if not self._camera_initialized:
+            self.setup_initial_view(position)
+            return
+        try:
+            ctr = self.vis.get_view_control()
+            ctr.set_lookat(position)
+        except Exception:
+            pass
 
     def tick(self) -> bool:
         """
